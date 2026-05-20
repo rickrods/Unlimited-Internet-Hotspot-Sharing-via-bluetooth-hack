@@ -1,0 +1,66 @@
+#!/bin/bash
+
+SPP_CHANNEL=$(sdptool browse $PHONE_MAC | grep -i -A 7  "Service Name: SecureTether SPP" | grep Channel | tr -dc '0-9')
+SERIAL_CHANNEL=$(sdptool browse $PHONE_MAC | grep -i -A 7  "Service Name: SecureTether serial port" | grep Channel | tr -dc '0-9')
+
+function pair_device {
+
+    sudo bluetoothctl
+    power on
+    scan on
+    agent on
+    pair $PHONE_MAC
+}
+
+function setup_serial {
+
+if [ ! -z $SERIAL_CHANNEL ]
+    then
+        sudo rfcomm bind $SERIAL_CHANNEL $PHONE_MAC $SERIAL_CHANNEL
+        sudo chmod 666 /dev/rfcomm"$SERIAL_CHANNEL"
+        sudo /usr/sbin/pppd user $USER password $PASSWORD call securetether /dev/rfcomm"$SERIAL_CHANNEL"
+    return 0
+fi
+}
+
+
+function setup_spp {
+# If SPP is not empty setup SPP
+if [ ! -z $SPP_CHANNEL ]
+    then
+        sudo rfcomm bind $SPP_CHANNEL $PHONE_MAC $SPP_CHANNEL
+        sudo chmod 666 /dev/rfcomm"$SPP_CHANNEL"
+        sudo /usr/sbin/pppd user $USER password $PASSWORD call securetether /dev/rfcomm"$SPP_CHANNEL"
+    return 0
+fi
+}
+
+function validate_channel {
+# If both channels have an error the script has failed
+if [ -z $SPP_CHANNEL ] && [ -z $SERIAL_ERROR ]
+    then
+        echo "Fatal error: no serial or spp channels available"
+    return 1
+fi
+# If SPP is not empty setup SPP
+if [ ! -z $SPP_CHANNEL ]
+    then
+        setup_spp
+fi
+if [ ! -z $SERIAL_CHANNEL ]
+    then
+        setup_serial
+fi
+
+}
+
+# Devices should be paired
+echo "Is the bluetooth device paired:  y/n"
+read PAIRED
+
+if [ $PAIRED = y ]
+then
+    validate_channel
+else
+    pair_device
+fi
